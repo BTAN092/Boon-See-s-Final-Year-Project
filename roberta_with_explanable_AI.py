@@ -16,13 +16,11 @@ from sklearn.metrics import classification_report
 from tabulate import tabulate
 import shap
 from lime.lime_text import LimeTextExplainer
-import numpy as np  # Import NumPy for type checking
+import numpy as np
 
-# Step 0: Specify the GPUs to use (e.g., GPU 0, 1, 2, and 3)
 GPU_IDS = '0,1,2,3'
 os.environ["CUDA_VISIBLE_DEVICES"] = GPU_IDS
 
-# Check and print the selected GPUs
 print(f"Using GPUs: {GPU_IDS}")
 if torch.cuda.is_available():
     for i in range(torch.cuda.device_count()):
@@ -30,11 +28,10 @@ if torch.cuda.is_available():
 else:
     print("CUDA is not available. Using CPU instead.")
 
-# Create a directory to save results
-RESULTS_DIR = "resulta"  # Corrected directory name
+RESULTS_DIR = "resulta"  
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-# Step 1: Load and Preprocess Data
+
 df = pd.read_csv("data.csv")
 label_map = {"negative": 0, "neutral": 1, "positive": 2}
 df['label'] = df['Sentiment'].map(label_map)
@@ -68,8 +65,6 @@ class SentimentDataset(Dataset):
             'labels': torch.tensor(label, dtype=torch.long)
         }
 
-# Step 2: Initialize the Tokenizer and Dataset
-
 
 tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
 max_len = 128
@@ -80,7 +75,6 @@ dataset = SentimentDataset(
     max_len=max_len
 )
 
-# Step 3: Split the Dataset into Training, Validation, and Test Sets
 train_size = 0.7
 val_size = 0.15
 test_size = 0.15
@@ -97,23 +91,19 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 print(f"Using device: {device}")
 print(f"Number of GPUs available: {torch.cuda.device_count()}")
 
-# Function to visualize SHAP
 def visualize_shap(shap_explainer, texts, save_dir):
     """
     Generate and save SHAP text plots for a list of texts.
     """
     shap_values = shap_explainer(texts)
     for i, text in enumerate(texts):
-        # Clean tokens if necessary
         if hasattr(shap_values[i], 'data'):
             shap_values[i].data = clean_tokens(shap_values[i].data)
         elif hasattr(shap_values[i], 'text'):
             shap_values[i].text = clean_tokens(shap_values[i].text)
-        
-        # Create the SHAP text plot and get the HTML representation
+
         shap_plot_html = shap.plots.text(shap_values[i], display=False)
-        
-        # Save the plot as an HTML file
+
         shap_plot_path = os.path.join(save_dir, f'shap_explanation_{i+1}.html')
         with open(shap_plot_path, 'w', encoding='utf-8') as f:
             f.write(shap_plot_html)
@@ -126,12 +116,11 @@ def clean_tokens(tokens):
     cleaned_tokens = []
     for token in tokens:
         if token.startswith('Ġ'):
-            cleaned_tokens.append(' ' + token[1:])  # Add a space before the word
+            cleaned_tokens.append(' ' + token[1:]) 
         else:
             cleaned_tokens.append(token)
     return cleaned_tokens
 
-# Function to visualize LIME
 def visualize_lime(lime_explainer, texts, tokenizer, model, save_dir):
     """
     Generate and save LIME explanations for a list of texts.
@@ -147,12 +136,10 @@ def visualize_lime(lime_explainer, texts, tokenizer, model, save_dir):
         exp.save_to_file(lime_html_path)
         print(f"Saved LIME explanation for sample {i+1} to {lime_html_path}")
 
-# Prediction functions for SHAP and LIME
 def predict_proba_shap(texts, tokenizer, model):
     """
     Predict probabilities for a list of texts using the tokenizer and model.
     """
-    # Convert texts to a list of strings if necessary
     if isinstance(texts, str):
         texts = [texts]
     elif isinstance(texts, np.ndarray):
@@ -161,7 +148,7 @@ def predict_proba_shap(texts, tokenizer, model):
         texts = list(texts)
 
     inputs = tokenizer(texts, return_tensors='pt', padding=True, truncation=True, max_length=128)
-    inputs = {k: v.to(model.device) for k, v in inputs.items()}  # Move inputs to the same device as the model
+    inputs = {k: v.to(model.device) for k, v in inputs.items()} 
     with torch.no_grad():
         outputs = model(**inputs)
         probs = torch.nn.functional.softmax(outputs.logits, dim=1)
@@ -173,7 +160,6 @@ def predict_proba_lime(texts, tokenizer, model):
     """
     return predict_proba_shap(texts, tokenizer, model)
 
-# Function to start training
 def start_training(learning_rate, num_train_epochs, batch_size, patience=5, model_save_path=None):
     training_args = TrainingArguments(
         output_dir='./best_model_RoBERTa',
@@ -187,13 +173,12 @@ def start_training(learning_rate, num_train_epochs, batch_size, patience=5, mode
         greater_is_better=False,
         logging_strategy="epoch",
         save_strategy="epoch",
-        disable_tqdm=False,          # Enable tqdm for progress bars
-        fp16=True,                   # Enable mixed precision training
-        dataloader_num_workers=4,    # Number of subprocesses for data loading
+        disable_tqdm=False,         
+        fp16=True,                 
+        dataloader_num_workers=4,    
         run_name=f"RoBERTa_lr{learning_rate}_bs{batch_size}_epochs{num_train_epochs}"
     )
 
-    # Initialize the model with num_labels set in the config
     config = RobertaConfig.from_pretrained('roberta-base', num_labels=3)
     model = RobertaForSequenceClassification.from_pretrained('roberta-base', config=config)
     model.to(device)
@@ -206,7 +191,6 @@ def start_training(learning_rate, num_train_epochs, batch_size, patience=5, mode
         callbacks=[EarlyStoppingCallback(early_stopping_patience=patience)]
     )
 
-    # Train the model and capture training/validation loss
     train_result = trainer.train()
     training_loss = train_result.training_loss
     eval_result = trainer.evaluate(eval_dataset=val_dataset)
@@ -222,7 +206,6 @@ def start_training(learning_rate, num_train_epochs, batch_size, patience=5, mode
     recall = classification_rep['weighted avg']['recall']
     f1_score = classification_rep['weighted avg']['f1-score']
 
-    # Determine fit status
     if validation_loss > training_loss and (validation_loss - training_loss) > 0.1:
         fit_status = "Overfitting"
     elif validation_loss > training_loss:
@@ -230,19 +213,15 @@ def start_training(learning_rate, num_train_epochs, batch_size, patience=5, mode
     else:
         fit_status = "Underfitting"
 
-    # Save the model if a path is provided
     if model_save_path:
         trainer.save_model(model_save_path)
         tokenizer.save_pretrained(model_save_path)
 
-    # Generate SHAP explanations for a few test samples
     sample_texts_shap = df['Sentence'].sample(5, random_state=42).tolist()
     background_texts = df['Sentence'].sample(100, random_state=42).tolist()
 
-    # Initialize SHAP's Text masker
     masker = shap.maskers.Text(tokenizer=tokenizer)
 
-    # Initialize SHAP Explainer with the masker and background data
     shap_explainer = shap.Explainer(
         lambda x: predict_proba_shap(x, tokenizer, model),
         masker=masker,
@@ -250,29 +229,24 @@ def start_training(learning_rate, num_train_epochs, batch_size, patience=5, mode
     )
     visualize_shap(shap_explainer, sample_texts_shap, RESULTS_DIR)
 
-    # Generate LIME explanations for a few test samples
     sample_texts_lime = df['Sentence'].sample(5, random_state=42).tolist()
     lime_explainer = LimeTextExplainer(class_names=["Negative", "Neutral", "Positive"])
     visualize_lime(lime_explainer, sample_texts_lime, tokenizer, model, RESULTS_DIR)
 
     return test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status
 
-# Default hyperparameters
 default_params = {
-    'Batch Size': 16,  # Per GPU batch size (16 per GPU * 4 GPUs = 64 effective batch size)
+    'Batch Size': 16, 
     'Learning Rate': 1.5e-5,
     'Epochs': 20
 }
 
-# Parameters to test (one at a time)
-batch_sizes = [16, 32]  # Varying batch size per GPU
-learning_rates = [1.5e-7, 1.5e-6, 5e-6, 1.5e-5, 5e-5, 1.5e-4, 5e-4, 1.5e-3, 2e-3, 5e-3, 0.01, 1.5e-2, 1.75e-2, 2e-2]  # Varying learning rate
-epochs = [5, 10, 20, 50, 100, 200, 300, 400, 450, 500]  # Varying number of epochs
-
+batch_sizes = [16, 32]
+learning_rates = [1.5e-7, 1.5e-6, 5e-6, 1.5e-5, 5e-5, 1.5e-4, 5e-4, 1.5e-3, 2e-3, 5e-3, 0.01, 1.5e-2, 1.75e-2, 2e-2] 
+epochs = [5, 10, 20, 50, 100, 200, 300, 400, 450, 500] 
 def run_experiments():
     results = []
 
-    # Test Batch Size (with other parameters fixed)
     for batch_size in batch_sizes:
         print(f"\nTesting Batch Size: {batch_size}")
         test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status = start_training(
@@ -296,7 +270,6 @@ def run_experiments():
             'Fit Status': fit_status
         })
 
-    # Test Learning Rate (with other parameters fixed)
     for learning_rate in learning_rates:
         print(f"\nTesting Learning Rate: {learning_rate}")
         test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status = start_training(
@@ -320,7 +293,6 @@ def run_experiments():
             'Fit Status': fit_status
         })
 
-    # Test Epochs (with other parameters fixed)
     for num_epochs in epochs:
         print(f"\nTesting Epochs: {num_epochs}")
         test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status = start_training(
@@ -344,19 +316,16 @@ def run_experiments():
             'Fit Status': fit_status
         })
 
-    # Convert results to a DataFrame with a specific column order
     df_results = pd.DataFrame(results, columns=[
         'Hyperparameter', 'Value', 'Batch Size', 'Learning Rate', 'Epochs',
         'Accuracy', 'Precision', 'Recall', 'F1-Score', 'Training Loss',
         'Validation Loss', 'Fit Status'
     ])
 
-    # Save results as CSV
     results_file = os.path.join(RESULTS_DIR, 'experiment_results.csv')
     df_results.to_csv(results_file, index=False)
     print(f"\nSaved experiment results to {results_file}")
 
-    # Save results as a table
     table_file = os.path.join(RESULTS_DIR, 'experiment_results.txt')
     with open(table_file, 'w') as f:
         f.write(tabulate(df_results, headers='keys', tablefmt='fancy_grid', showindex=False))
@@ -367,8 +336,7 @@ def run_experiments():
 def plot_results(df_results):
     metrics = ['Accuracy', 'Precision', 'Recall', 'F1-Score']
     hyperparameters = ['Batch Size', 'Learning Rate', 'Epochs']
-    
-    # Iterate through each hyperparameter and metric to create separate plots
+
     for hyperparameter in hyperparameters:
         df_filtered = df_results[df_results['Hyperparameter'] == hyperparameter]
 
@@ -385,7 +353,6 @@ def plot_results(df_results):
             plt.ylabel(metric)
             plt.tight_layout()
 
-            # Handle file naming for special characters in hyperparameter names
             hyperparameter_clean = hyperparameter.lower().replace(" ", "_")
             metric_clean = metric.lower().replace(" ", "_")
             plot_file = os.path.join(RESULTS_DIR, f'{metric_clean}_vs_{hyperparameter_clean}_plot.png')

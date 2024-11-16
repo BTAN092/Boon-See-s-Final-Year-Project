@@ -15,23 +15,19 @@ from transformers import (
 from sklearn.metrics import classification_report
 from tabulate import tabulate
 
-# Step 0: Specify the GPU to use
 GPU_ID = '3'
 os.environ["CUDA_VISIBLE_DEVICES"] = GPU_ID
 
-# Check and print the selected GPU
 print(f"Using GPU: {GPU_ID}")
 if torch.cuda.is_available():
     print(f"Current device: {torch.cuda.get_device_name(torch.cuda.current_device())}")
 else:
     print("CUDA is not available. Using CPU instead.")
 
-# Create a directory to save results
 RESULTS_DIR = "results2"
 os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-# Step 1: Load and Preprocess Data
 df = pd.read_csv("data.csv")
 label_map = {"negative": 0, "neutral": 1, "positive": 2}
 df['label'] = df['Sentiment'].map(label_map)
@@ -65,7 +61,6 @@ class SentimentDataset(Dataset):
             'labels': torch.tensor(label, dtype=torch.long)
         }
 
-# Step 2: Initialize the Tokenizer and Dataset
 tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
 max_len = 128
 dataset = SentimentDataset(
@@ -75,7 +70,6 @@ dataset = SentimentDataset(
     max_len=max_len
 )
 
-# Step 3: Split the Dataset into Training, Validation, and Test Sets
 train_size = 0.7
 val_size = 0.15
 test_size = 0.15
@@ -91,19 +85,16 @@ train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 print(f"Using device: {device}")
 
-# Function to start training
 def start_training(learning_rate, num_train_epochs, batch_size, warmup_ratio, patience=5):
-    # Set up model configuration with dropout
     config = RobertaConfig.from_pretrained(
         'roberta-base',
         num_labels=3,
-        hidden_dropout_prob=0.1,  # Keeping default dropout
-        attention_probs_dropout_prob=0.1  # Keeping default dropout
+        hidden_dropout_prob=0.1, 
+        attention_probs_dropout_prob=0.1 
     )
     model = RobertaForSequenceClassification.from_pretrained('roberta-base', config=config)
     model.to(device)
 
-    # Define training arguments
     training_args = TrainingArguments(
         output_dir='./best_model_RoBERTa',
         evaluation_strategy="epoch",
@@ -111,7 +102,7 @@ def start_training(learning_rate, num_train_epochs, batch_size, warmup_ratio, pa
         per_device_eval_batch_size=batch_size,
         num_train_epochs=num_train_epochs,
         learning_rate=learning_rate,
-        warmup_ratio=warmup_ratio,  # Setting warmup ratio
+        warmup_ratio=warmup_ratio, 
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
@@ -120,7 +111,6 @@ def start_training(learning_rate, num_train_epochs, batch_size, warmup_ratio, pa
         disable_tqdm=True
     )
 
-    # Trainer initialization
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -129,7 +119,6 @@ def start_training(learning_rate, num_train_epochs, batch_size, warmup_ratio, pa
         callbacks=[EarlyStoppingCallback(early_stopping_patience=patience)]
     )
 
-    # Train the model and capture training/validation loss
     train_result = trainer.train()
     training_loss = train_result.training_loss
     eval_result = trainer.evaluate(eval_dataset=val_dataset)
@@ -145,7 +134,6 @@ def start_training(learning_rate, num_train_epochs, batch_size, warmup_ratio, pa
     recall = classification_rep['weighted avg']['recall']
     f1_score = classification_rep['weighted avg']['f1-score']
 
-    # Determine fit status
     if validation_loss > training_loss and (validation_loss - training_loss) > 0.1:
         fit_status = "Overfitting"
     elif validation_loss > training_loss:
@@ -155,7 +143,6 @@ def start_training(learning_rate, num_train_epochs, batch_size, warmup_ratio, pa
 
     return test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status
 
-# Default hyperparameters
 default_params = {
     'Batch Size': 32,
     'Learning Rate': 1.5e-5,
@@ -171,7 +158,6 @@ warmup_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 def run_experiments():
     results = []
 
-    # Test Batch Size (with other parameters fixed)
     for batch_size in batch_sizes:
         print(f"Testing Batch Size: {batch_size}")
         test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status = start_training(
@@ -196,7 +182,6 @@ def run_experiments():
             'Fit Status': fit_status
         })
 
-    # Test Learning Rate (with other parameters fixed)
     for learning_rate in learning_rates:
         print(f"Testing Learning Rate: {learning_rate}")
         test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status = start_training(
@@ -221,7 +206,6 @@ def run_experiments():
             'Fit Status': fit_status
         })
 
-    # Test Epochs (with other parameters fixed)
     for num_epochs in epochs:
         print(f"Testing Epochs: {num_epochs}")
         test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status = start_training(
@@ -246,7 +230,6 @@ def run_experiments():
             'Fit Status': fit_status
         })
 
-    # Test Warmup Rate (with other parameters fixed)
     for warmup_rate in warmup_rates:
         print(f"Testing Warmup Rate: {warmup_rate}")
         test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status = start_training(
@@ -271,18 +254,15 @@ def run_experiments():
             'Fit Status': fit_status
         })
 
-    # Convert results to a DataFrame with a specific column order
     df_results = pd.DataFrame(results, columns=[
         'Hyperparameter', 'Value', 'Batch Size', 'Learning Rate', 'Epochs', 'Warmup Rate',
         'Accuracy', 'Precision', 'Recall', 'F1-Score', 'Training Loss', 'Validation Loss', 'Fit Status'
     ])
 
-    # Save results as CSV
     results_file = os.path.join(RESULTS_DIR, 'experiment_results.csv')
     df_results.to_csv(results_file, index=False)
     print(f"Saved experiment results to {results_file}")
 
-    # Save results as a table
     table_file = os.path.join(RESULTS_DIR, 'experiment_results.txt')
     with open(table_file, 'w') as f:
         f.write(tabulate(df_results, headers='keys', tablefmt='fancy_grid', showindex=False))
@@ -293,8 +273,7 @@ def run_experiments():
 def plot_results(df_results):
     metrics = ['Accuracy', 'Precision', 'Recall', 'F1-Score']
     hyperparameters = ['Batch Size', 'Learning Rate', 'Epochs', 'Warmup Rate']
-    
-    # Iterate through each hyperparameter and metric to create separate plots
+
     for hyperparameter in hyperparameters:
         df_filtered = df_results[df_results['Hyperparameter'] == hyperparameter]
 
@@ -311,7 +290,6 @@ def plot_results(df_results):
             plt.ylabel(metric)
             plt.tight_layout()
 
-            # Format x-axis if hyperparameter is Learning Rate for better readability
             if hyperparameter == 'Learning Rate':
                 plt.xscale('log')
 

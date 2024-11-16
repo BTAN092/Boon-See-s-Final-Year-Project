@@ -53,7 +53,6 @@ class SentimentDataset(Dataset):
             'labels': torch.tensor(label, dtype=torch.long)
         }
 
-# Step 2: Initialize the Tokenizer and Dataset
 tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
 max_len = 128
 dataset = SentimentDataset(
@@ -78,7 +77,6 @@ train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 print(f"Using device: {device}")
 
-# Function to start training
 def start_training(learning_rate, num_train_epochs, batch_size, patience=5):
     training_args = TrainingArguments(
         output_dir='./best_model_ALBERT',
@@ -106,7 +104,6 @@ def start_training(learning_rate, num_train_epochs, batch_size, patience=5):
         callbacks=[EarlyStoppingCallback(early_stopping_patience=patience)]
     )
 
-    # Train the model and capture training/validation loss
     train_result = trainer.train()
     training_loss = train_result.training_loss
     eval_result = trainer.evaluate(eval_dataset=val_dataset)
@@ -122,7 +119,6 @@ def start_training(learning_rate, num_train_epochs, batch_size, patience=5):
     recall = classification_rep['weighted avg']['recall']
     f1_score = classification_rep['weighted avg']['f1-score']
 
-    # Determine fit status
     if validation_loss > training_loss and (validation_loss - training_loss) > 0.1:
         fit_status = "Overfitting"
     elif validation_loss > training_loss:
@@ -132,22 +128,20 @@ def start_training(learning_rate, num_train_epochs, batch_size, patience=5):
 
     return test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status
 
-# Default hyperparameters
+
 default_params = {
     'Batch Size': 32,
     'Learning Rate': 1.5e-5,
     'Epochs': 20
 }
 
-# Parameters to test (one at a time)
-batch_sizes = [16, 32]  # Varying batch size
-learning_rates = [1.5e-7, 1.5e-6, 5e-6, 1.5e-5, 5e-5, 1.5e-4, 5e-4, 1.5e-3, 2e-3, 5e-3, 0.01, 1.5e-2, 1.75e-2, 2e-2]  # Varying learning rate
-epochs = [5, 10, 20, 50, 100, 200, 300, 400, 450, 500]  # Varying number of epochs
+batch_sizes = [16, 32] 
+learning_rates = [1.5e-7, 1.5e-6, 5e-6, 1.5e-5, 5e-5, 1.5e-4, 5e-4, 1.5e-3, 2e-3, 5e-3, 0.01, 1.5e-2, 1.75e-2, 2e-2]
+epochs = [5, 10, 20, 50, 100, 200, 300, 400, 450, 500] 
 
 def run_experiments():
     results = []
 
-    # Test Batch Size (with other parameters fixed)
     for batch_size in batch_sizes:
         print(f"Testing Batch Size: {batch_size}")
         test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status = start_training(
@@ -168,7 +162,6 @@ def run_experiments():
             'Fit Status': fit_status
         })
 
-    # Test Learning Rate (with other parameters fixed)
     for learning_rate in learning_rates:
         print(f"Testing Learning Rate: {learning_rate}")
         test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status = start_training(
@@ -189,7 +182,6 @@ def run_experiments():
             'Fit Status': fit_status
         })
 
-    # Test Epochs (with other parameters fixed)
     for num_epochs in epochs:
         print(f"Testing Epochs: {num_epochs}")
         test_accuracy, precision, recall, f1_score, training_loss, validation_loss, fit_status = start_training(
@@ -232,7 +224,6 @@ def plot_results(df_results):
     metrics = ['Accuracy', 'Precision', 'Recall', 'F1-Score']
     hyperparameters = ['Batch Size', 'Learning Rate', 'Epochs']
     
-    # Iterate through each hyperparameter and metric to create separate plots
     for hyperparameter in hyperparameters:
         df_filtered = df_results[df_results['Hyperparameter'] == hyperparameter]
 
